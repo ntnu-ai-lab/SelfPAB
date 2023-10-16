@@ -1,0 +1,72 @@
+# Train command
+TRAIN_COMMAND: [ python, upstream.py ]
+
+# Path to training dataset 
+TRAIN_DATA: /path/to/upstream_dataset/
+# Amount of training data used for validation (between 0 and 1)
+#VALID_SPLIT: 0.1
+SEED: 256
+
+NUM_WORKERS: 40  # Num of workers for data loading
+NUM_GPUS: [1]  # How many GPUs to use
+WANDB: False
+
+PROJ_NAME: SelfPABUpstream  # Just for logging
+
+# -- Dataset class
+DATASET: HUNT4Masked
+DATASET_ARGS:
+  x_columns: [[0,1,2,3,4,5]]  # Which columns to use 0=Bx, 1=By, 2=Bz, 3=Tx, 4=Ty, 5=Tz
+  y_columns: [[0,1,2,3,4,5]]
+  switch_sensor_prob: [0.0]  # Switch x and y columns randomly with prob
+  sample_freq: [50]  # Original sampling freq in Hz. Do not change
+  sequence_length: [15000]  # Window size (in samples) fed into the model
+  phase: [False]
+  normalize: [True]  # Whether to normalize the training data
+  norm_params_path: [params/norm_params/HUNT4/normalization_params_STFT_feats156_seqlen599/]
+  STFT: [True]  # Compute STFT before feeding into model
+  stft_n_fft: [50]  # Size of Fourier transform (in samples)
+  stft_hop_len: [null]  # For STFT computation. If None, n_fft//2
+  num_train_hours: [100000]  # Amount of HUNT4 hours
+  num_valid_hours: [1000]  # Amount of HUNT4 hours
+  num_test_hours: [10000]  # Amount of HUNT4 hours
+  # Whether to extract day time only (6am-12am)
+  skip_night_time: False
+  ##### Alteration parameters #####
+  # percentage of time frames to mask in spectrogram:
+  time_alter_percentage: 0.15
+  # number of consecutive time frames to mask in spectrogram:
+  time_alter_width: 3
+  # percentage of frequency bins to mask in spectrogram:
+  freq_alter_percentage: 0.2
+  # number of consecutive frequency bins to mask in spectrogram:
+  freq_alter_width: 3
+  #################################
+
+# -- Model 
+# Which classifier to use 
+ALGORITHM: TransformerEncoderNetwork
+# Arguments for classifier
+# (all given as lists in case to perform a GridSearch)
+ALGORITHM_ARGS:
+  epochs: [50]
+  batch_size: [64]
+  loss: [maskedL1]
+  output_activation: [null]  # null=identity
+  metrics: [null]  # Which metrics to log
+  optimizer: [AdamW]
+  weight_decay: [1e-5]
+  lr: [1e-4]
+  lr_scheduler: [LinearWUSchedule]
+  # Architecture params
+  n_encoder_layers: [4]
+  nhead: [6]
+  d_model: [1500]
+  dim_feedforward: [2048]  # Dim of ff layer inside encoder layer
+  positional_encoding: ['AbsolutePositionalEncoding']
+  dropout: [0.1]  # Dropout probability
+  n_prediction_head_layers: [1]  # Num layers of MLP at end of model
+  dim_prediction_head: [null]  # Dim of hidden layers of MLP at end od model
+  # What opertation to perform on sequence output?
+  # null="seq2seq model", mean="seq2single by averaging output sequences"
+  seq_operation: [null]
