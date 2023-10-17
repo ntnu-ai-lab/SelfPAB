@@ -38,3 +38,13 @@ The training results/progress can be logged in [Weights and Biases](https://wand
 
 ## Citation
 If you use the [pre-trained SelfPAB upstream model](https://github.com/ntnu-ai-lab/SelfPAB/blob/main/params/selfPAB_upstream/upstream_model.ckpt) for your research, please cite the following paper:
+```bibtex
+@inproceedings{logacjovLargeScalePreTrainingDualAccelerometer2023,
+  title = {Large-{{Scale Pre-Training}} for {{Dual-Accelerometer Human Activity Recognition}}},
+  booktitle = {35th {{Norwegian ICT Conference}} for {{Research}} and {{Education}}, {{Accepted}} for Publication},
+  author = {Logacjov, Aleksej and Herland, Sverre and Ustad, Astrid and Bach, Kerstin},
+  year = {2023},
+  month = nov,
+  address = {{Stavanger, Norway}},
+}
+```
