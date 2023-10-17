@@ -2,3 +2,5 @@ __pycache__/
 *venv*
 data/*
 .python-version
+*cmats*
+.ipynb_checkpoints/

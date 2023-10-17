@@ -36,6 +36,8 @@ The downstream config has an argument called "upstream_model_path", defining the
 ## Results Visualization
 The training results/progress can be logged in [Weights and Biases](https://wandb.ai/) by setting the WANDB argument in the config.yml files to True. For downstream training, the WANDB_KEY has to be provided in the config.yml file as well.
 
+The LOSO results are stored as .pkl files in a subfolder called loso_cmat. These can be visualized using the loso_viz.ipynb file.
+
 ## Citation
 If you use the [pre-trained SelfPAB upstream model](https://github.com/ntnu-ai-lab/SelfPAB/blob/main/params/selfPAB_upstream/upstream_model.ckpt) for your research, please cite the following paper:
 ```bibtex
