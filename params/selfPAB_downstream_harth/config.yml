@@ -29,7 +29,7 @@ TEST_SUBJECTS: [S027.csv,S023.csv,S008.csv,S019.csv,S006.csv,S024.csv]
 SEED: 42
 
 NUM_WORKERS: 10  # Num of workers for data loading
-NUM_GPUS: [1]  # How many GPUs to use
+NUM_GPUS: [0]  # How many/which GPUs to use
 WANDB: False
 WANDB_KEY: '<Put wandb key here>'
 

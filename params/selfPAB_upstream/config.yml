@@ -8,7 +8,7 @@ TRAIN_DATA: /path/to/upstream_dataset/
 SEED: 256
 
 NUM_WORKERS: 40  # Num of workers for data loading
-NUM_GPUS: [1]  # How many GPUs to use
+NUM_GPUS: [0]  # How many/which GPUs to use
 WANDB: False
 
 PROJ_NAME: SelfPABUpstream  # Just for logging

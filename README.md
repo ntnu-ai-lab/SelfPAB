@@ -6,7 +6,10 @@ Implementation of the SelfPAB method presented in our paper: Large-Scale Pre-Tra
 ```bash
 pip install -r requirements.txt
 ```
-
+__Note__: Per default the script tries to use a GPU to run the trainings. If no supported GPU can be allocated, a MisconfigurationException will occur. All the training scripts can be executed on the CPU instead by setting the "NUM_GPUS" parameter in the corresponding config.yml files to an empty list:
+```bash
+NUM_GPUS: []
+```
 ## Download Datasets
 Download the required datasets. Currently the downstream datasets [HARTH](https://archive.ics.uci.edu/dataset/779/harth) and [HAR70+](https://archive.ics.uci.edu/dataset/780/har70) are supported. The HUNT4 subset used for pre-training is planned to be published in future releases.
 ```bash
