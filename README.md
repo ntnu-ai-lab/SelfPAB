@@ -2,7 +2,7 @@
 Implementation of the SelfPAB method presented in our paper: Large-Scale Pre-Training for Dual-Accelerometer Human Activity Recognition.
 
 ## Requirements
-- Python 3.8.10
+[![Python 3.8.10](https://img.shields.io/badge/Python_Versions-3.8_%7C_3.9_%7C_3.10-blue)](https://www.python.org/downloads/release/python-3810/)
 ```bash
 pip install -r requirements.txt
 ```
