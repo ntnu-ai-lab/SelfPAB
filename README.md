@@ -14,7 +14,8 @@ NUM_GPUS: []
 Download the required datasets. Currently the downstream datasets [HARTH](https://archive.ics.uci.edu/dataset/779/harth) and [HAR70+](https://archive.ics.uci.edu/dataset/780/har70) are supported. The HUNT4 subset used for pre-training is planned to be published in future releases.
 ```bash
 python download_dataset.py <dataset_name>
-# Example: python download_dataset.py harth
+# Example (HARTH): python download_dataset.py harth
+# Example (HAR70+): python download_dataset.py har70plus
 ```
 This command will download the given dataset into the [data/](https://github.com/ntnu-ai-lab/SelfPAB/tree/main/data) folder.
 
