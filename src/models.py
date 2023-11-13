@@ -910,7 +910,7 @@ class UpstreamModel(pl.LightningModule):
         for i, l in enumerate(list(cp_model.children())[:-cut_layers]):
             if self.do_weighted_sum and i == weighted_sum_layer:
                 _l = [p for p in l.children()][0] \
-                     if type(l)==torch.nn.modules.transformer.TransformerEncoder \
+                     if type(l)==TransformerEncoder \
                      else l
                 num_ws_weights = 0
                 for j, subl in enumerate(_l.children()):
