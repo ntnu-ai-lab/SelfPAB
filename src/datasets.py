@@ -45,9 +45,11 @@ def get_dataset(
     replace_classes=None,
     test_mode=False,
     valid_mode=False,
-    inference_mode=False
+    inference_mode=False,
+    name_label_map=None
 ):
-    allowed_datasets = ['TimeSeries', 'STFT', 'HUNT4Masked']
+    allowed_datasets = ['TimeSeries', 'STFT', 'HUNT4Masked',
+                        'USCHAD', 'PAMAP2', 'MobiAct']
     if dataset_name in allowed_datasets:
         cls = getattr(
             sys.modules[__name__],
@@ -62,7 +64,8 @@ def get_dataset(
                    replace_classes=replace_classes,
                    test_mode=test_mode,
                    valid_mode=valid_mode,
-                   inference_mode=inference_mode
+                   inference_mode=inference_mode,
+                   name_label_map=name_label_map
                   )
     else:
         raise ValueError((f'No Dataset class with name"{dataset_name}".\n'
@@ -463,6 +466,7 @@ class TimeSeriesDataset(HARDataset):
                 _sum = sum([x.sum(axis=0) for x,_ in self.data.values()])
                 _len = sum([x.shape[0] for x,_ in self.data.values()])
                 _m = _sum/_len
+
                 if save_on_disk:
                     src.utils.store_tensor(_m, _m_path)
         else:
@@ -585,7 +589,8 @@ class STFTDataset(HARDataset):
 
         '''
         self.normalize = args['normalize']
-        self.stack_axes = True
+        self.stack_axes = args['stack_axes'] if 'stack_axes' in args else True
+        self.unstack_sensors = args['unstack_sensors'] if 'unstack_sensors' in args else False
         self.size = 0
         self._y = {}
         # Read file params
@@ -663,9 +668,13 @@ class STFTDataset(HARDataset):
                     pad=[0,0,0,overflow],
                     value=self.padding_val
                 )
+                if self.unstack_sensors:
+                    x = self._unstack_sensors(x)
             return x
         else:
             y = self.data[fn][1][start_idx:end_idx]
+            if self.unstack_sensors:
+                x = self._unstack_sensors(x)
             return x, y
 
     def __len__(self):
@@ -679,10 +688,17 @@ class STFTDataset(HARDataset):
     @property
     def feature_dim(self):
         '''Input feature dimensionality'''
-        if not self.phase:
-            return (self.n_fft // 2 + 1) * len(self.x_columns)
+        if self.stack_axes:
+            base_shape = (self.n_fft // 2 + 1) * len(self.x_columns)
         else:
-            return (self.n_fft // 2 + 1) * len(self.x_columns) * 2
+            base_shape = self.n_fft // 2 + 1
+        if self.unstack_sensors:
+            num_sensors = len(self.x_columns)//3
+            base_shape = base_shape // num_sensors
+        if not self.phase:
+            return base_shape
+        else:
+            return base_shape * 2
 
     @property
     def output_shapes(self):
@@ -913,6 +929,13 @@ class STFTDataset(HARDataset):
             data_ranges[fn] = range(self.size-num_slices, self.size)
         return data_ranges
 
+    def _unstack_sensors(self, t):
+        rt = []
+        num_sensors = len(self.x_columns)//3
+        for i in range(num_sensors):
+            rt.append(t[:,i*self.feature_dim:(i+1)*self.feature_dim])
+        return torch.stack(rt)
+
     def get_filename_for_idx(self, idx):
         '''Given idx, which filename to use'''
         return [fn for fn, r in self.data_ranges.items() if idx in r][0]
@@ -954,9 +977,15 @@ class STFTDataset(HARDataset):
                 _len = sum([x.shape[0] for x,_ in self.data.values()])
                 _m = _sum/_len
                 if save_on_disk:
-                    src.utils.store_tensor(_m, _m_path)
+                    # On disk we save the stacked version
+                    _m_to_store = _m if self.stack_axes \
+                            else einops.rearrange(_m,  'C F P -> (C F P)')
+                    src.utils.store_tensor(_m_to_store, _m_path)
         else:
             _m = src.utils.load_tensor(_m_path)
+            new_shape = (len(self.x_columns), self.feature_dim, 1)
+            _m = _m if self.stack_axes \
+                    else torch.reshape(_m, new_shape)
         return _m
 
     # @cached
@@ -990,9 +1019,15 @@ class STFTDataset(HARDataset):
                 _len = sum([x.shape[0] for x,_ in self.data.values()])
                 _s = np.sqrt(_sum/_len)
                 if save_on_disk:
-                    src.utils.store_tensor(_s, _s_path)
+                    # On disk we save the stacked version
+                    _s_to_store = _s if self.stack_axes \
+                            else einops.rearrange(_s,  'C F P -> (C F P)')
+                    src.utils.store_tensor(_s_to_store, _s_path)
         else:
             _s = src.utils.load_tensor(_s_path)
+            new_shape = (len(self.x_columns), self.feature_dim, 1)
+            _s = _s if self.stack_axes \
+                    else torch.reshape(_s, new_shape)
         _s = torch.where(_s==0.0, EPS, _s)  # Avoid div by 0
         return _s
 
@@ -1437,7 +1472,7 @@ class HUNT4MaskedDataset(HUNT4Dataset):
         x = super(HUNT4MaskedDataset, self).__getitem__(idx)
         y = x.detach().clone()
         # Maybe swap sensors
-        if torch.rand(1) > self.switch_sensor_prob:
+        if torch.rand(1) >= self.switch_sensor_prob:
             x = x[:,self.x_cols,:,:]
             y = y[:,self.y_cols,:,:]
             in_sensor_pos = self._get_input_sensor_position(self.x_cols)
@@ -1554,6 +1589,571 @@ class HUNT4MaskedDataset(HUNT4Dataset):
             new_data.append((x[start_idx:end_idx],
                             (y[start_idx:end_idx], loss_mask[start_idx:end_idx])))
         return torch.utils.data.default_collate(new_data)
+
+
+
+###########################################################################
+#         Publicly available datasets not from us for test purposes       #
+###########################################################################
+class HARBaseDataset(torch.utils.data.Dataset):
+    def __init__(
+        self, args, root_dir,
+        num_classes,
+        config_path='',
+        label_map=None,
+        valid_mode=False,
+        test_mode=False,
+        inference_mode=False,
+        skip_files=[],
+        name_label_map=None,
+        **kwargs
+        # x_columns, y_column,
+    ):
+        '''Super class for public HAR datasets'''
+        self._cache = {}
+        # In case of resampling
+        self.source_freq = args['source_freq']
+        self.target_freq = args['target_freq']
+        # In case sensor reorientation to HUNT required
+        self.reorientation = args['reorientation'] \
+                if 'reorientation' in args else False
+        self.x_columns=args['x_columns']
+        self.y_column=args['y_column']
+        self.label_map = label_map
+        self.name_label_map = name_label_map
+        self.train_mode = not valid_mode and not test_mode
+        self.inference_mode = inference_mode
+        self.root_path = root_dir
+        self.skip_files = skip_files
+        self.num_classes = num_classes
+        self.normalize = args['normalize']
+        assert(self.normalize and config_path!='') or not self.normalize, \
+                'Config path needs to be provided'
+        self.sequence_length = args['sequence_length']
+        self.apply_stft = args['stft'] if 'stft' in args else True
+        if self.apply_stft:
+            self.n_fft = args['n_fft']
+            self.hop_length = args['hop_length']
+            self.hop_length = self.n_fft//2 if args['hop_length'] is None else args['hop_length']
+            self.window = torch.hann_window(self.n_fft)
+            self.sequence_length = self.sequence_length // self.hop_length -1
+        self.data = self.read_all(self.root_path)
+        self._size = sum([len(x) for x in self.data.values()])
+        if self.normalize:
+            if 'norm_params_path' in args:
+                self.normalize_params_path = args['norm_params_path']
+            else:
+                self.normalize_params_path = os.path.join(
+                    config_path,
+                    f'norm_params'
+                )
+            force = args['force_norm_comp'] if 'force_norm_comp' in args else False
+            force = force and self.train_mode  # Force impossible for test/valid
+            self.mean = self._mean(save_on_disk=self.train_mode, force=force)
+            self.std = self._std(save_on_disk=self.train_mode, force=force)
+            self.normalize_data()
+
+    def read_all(self, root_path):
+        msg = ('Implement read_all(): Returns the dataset as dict')
+        raise NotImplementedError(msg)
+
+    def __getitem__(self, idx):
+        fn = self.get_filename_for_idx(idx)
+        range_start_idx = min(self.data_ranges[fn])
+        start_idx = idx-range_start_idx
+        if self.inference_mode:
+            return self.data[fn][start_idx][0]
+        else:
+            return self.data[fn][start_idx]
+
+    def get_filename_for_idx(self, idx):
+        '''Given idx, which filename to use'''
+        return [fn for fn, r in self.data_ranges.items() if idx in r][0]
+
+    def post_proc_y(self, t):
+        '''Undo all changes made in this Dataset to original y data'''
+        t_dict = {}
+        for filename, _range in self.data_ranges.items():
+            _t = [einops.rearrange(t[i], 'B T C -> (B T) C') for i in _range]
+            _t = [list(src.utils.argmax(_batch, axis=-1).numpy()) for _batch in _t]
+            new_t = []
+            for _batch in _t:
+                new_t += _batch
+            t_dict[filename] = new_t
+        return t_dict
+
+    def y(self):
+        '''Returns y_column values as indices
+
+        Returns
+        -------
+        dict of tensors
+
+        '''
+        _y = {}
+        for sid, data_list in self.data.items():
+            _y[sid] = []
+            for (_, sy) in data_list:
+                _y[sid] += list(sy.numpy())
+        return _y
+
+    def resample(self, df, discrete_columns):
+        '''Resample the given data frame'''
+        rdf = src.utils.resample(
+            signal=df,
+            source_rate=self.source_freq,
+            target_rate=self.target_freq,
+            discrete_columns=discrete_columns,
+            resampler='fourier',
+            padder=None,
+            pad_size=None
+        )
+        return rdf
+
+    def stft(self, x):
+        '''Compute STFT of given signals'''
+        # reshape required for correct STFT computation:
+        # [signal_len, num_channels] -> [num_channels, signal_len]
+        x = einops.rearrange(x, 'S C -> C S')
+        x = torch.stft(
+            input=x,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            win_length=self.n_fft,
+            window=self.window,
+            center=False,
+            return_complex=True
+        )  # [num_channels, num_bins, num_frames]
+        x = src.utils.complex_to_magnitude(x, expand=True)
+        # Stack all spectrograms and put time dim first:
+        # [num_channels, num_bins, num_frames, stft_parts] ->
+        # [num_frames, num_channels x num_bins x stft_parts]
+        x = einops.rearrange(x, 'C F T P -> T (C F P)')  # P=2 or 1
+        return x
+
+    def segment_xy(self, x, y):
+        # Windowing to sequence_length:
+        x = windowed_signals(
+            signals=x.numpy(),
+            frame_length=self.sequence_length,
+            frame_step=self.sequence_length,
+            pad_end=True
+        )
+        y = windowed_labels(
+            labels=y,
+            num_labels=self.num_classes,
+            frame_length=self.sequence_length,
+            frame_step=self.sequence_length,
+            pad_end=True,
+            kind=None
+        )
+        for _x, _y in zip(x, y):
+            _x = torch.tensor(_x, dtype=torch.float32)
+            _y = torch.tensor(_y, dtype=torch.int64)
+            yield [_x, _y]
+
+    def _mean(self, save_on_disk=False, force=False):
+        '''Mean across all samples for each feature
+
+        If mean not already saved on disk in self.normalize_params_path,
+        it is computed using self.data. Otherwise, it is read from
+        disk.
+
+        Parameters
+        ----------
+        save_on_disk (bool): Stores computed mean in normalize_params_path
+        force (bool): Force recomputation of mean even if on disk
+
+        Returns
+        -------
+        torch.Tensor
+
+        '''
+        _m_path = os.path.join(self.normalize_params_path, 'mean.csv')
+        if not os.path.exists(_m_path) or force:
+            if not self.train_mode:
+                raise FileNotFoundError(
+                    f'No normalization param found {_m_path}'
+                )
+            else:
+                print('Creating mean...')
+                _sum = sum([sum([_x[0].sum(axis=0) for _x in x]) for _, x in self.data.items()])
+                _len = sum([sum([_x[0].shape[0] for _x in x]) for _, x in self.data.items()])
+                _m = _sum/_len
+                if save_on_disk:
+                    src.utils.store_tensor(_m, _m_path)
+        else:
+            _m = src.utils.load_tensor(_m_path)
+        return _m
+
+    def _std(self, save_on_disk=False, force=False):
+        '''Std across all samples for each feature
+
+        If std not already saved on disk in self.normalize_params_path,
+        it is computed using self.data. Otherwise, it is read from
+        disk.
+
+        Parameters
+        ----------
+        save_on_disk (bool): Stores computed std in normalize_params_path
+        force (bool): Force recomputation of std even if on disk
+
+        Returns
+        -------
+        torch.Tensor
+
+        '''
+        _s_path = os.path.join(self.normalize_params_path, 'std.csv')
+        if not os.path.exists(_s_path) or force:
+            if not self.train_mode:
+                raise FileNotFoundError(
+                    f'No normalization param found {_s_path}'
+                )
+            else:
+                print('Creating std...')
+                _m = self.mean
+                _sum = sum([sum([((_x[0]-_m)**2).sum(axis=0) for _x in x]) for _, x in self.data.items()])
+                _len = sum([sum([_x[0].shape[0] for _x in x]) for _, x in self.data.items()])
+                _s = np.sqrt(_sum/_len)
+                if save_on_disk:
+                    src.utils.store_tensor(_s, _s_path)
+        else:
+            _s = src.utils.load_tensor(_s_path)
+        _s = torch.where(_s==0.0, EPS, _s)  # Avoid div by 0
+        return _s
+
+    def normalize_data(self):
+        '''Normalize time signals'''
+        for fn, xs in self.data.items():
+            new_xs = []
+            for (x, y) in xs:
+                x = normalize(x=x, mean=self.mean, std=self.std)
+                new_xs.append([x,y])
+            self.data[fn] = new_xs
+
+    def collate_fn(self, data):
+        '''Custom collate_fn for different sequence lengths in a batch'''
+        x = torch.nn.utils.rnn.pad_sequence([d[0] for d in data],
+                                            batch_first=True,
+                                            padding_value=0.0)
+        y = torch.nn.utils.rnn.pad_sequence([d[1] for d in data],
+                                            batch_first=True,
+                                            padding_value=0)
+        # 0s where padding applied
+        mask = torch.ones(y.shape)
+        for i in range(len(mask)):
+            mask[i][len(data[i][1]):] = 0.0
+        return [x, y, mask]
+
+    @property
+    def feature_dim(self):
+        '''Input feature dimensionality'''
+        if self.apply_stft:
+            return (self.n_fft // 2 + 1) * len(self.x_columns)
+        else:
+            return len(self.x_columns)
+
+    @property
+    def output_shapes(self):
+        '''Shape of y output if given and one-hot encoded'''
+        return self.num_classes
+
+    @property
+    def input_shape(self):
+        '''Num bins'''
+        return self.feature_dim
+
+    @property
+    def data_ranges(self):
+        '''Idx ranges for each subject'''
+        _data_ranges = {}
+        idx = 0
+        for sid, data_list in self.data.items():
+            dlen = len(data_list)
+            _data_ranges[sid] = range(idx,idx+dlen)
+            idx += dlen
+        return _data_ranges
+
+    def __len__(self):
+        return self._size
+
+
+class PAMAP2Dataset(HARBaseDataset):
+    def __init__(
+        self, args, root_dir,
+        num_classes,
+        config_path='',
+        label_map=None,
+        valid_mode=False,
+        test_mode=False,
+        inference_mode=False,
+        skip_files=[],
+        **kwargs
+        # x_columns, y_column,
+    ):
+        '''Dataset class for loading the PAMAP dataset properly.
+
+        Parameters
+        ----------
+        root_dir (string): Directory of training data
+
+        '''
+        self.drop_labels = [0]  # Ignore 0 label
+        super().__init__(
+            args=args,
+            root_dir=root_dir,
+            num_classes=num_classes,
+            config_path=config_path,
+            label_map=label_map,
+            valid_mode=valid_mode,
+            test_mode=test_mode,
+            inference_mode=inference_mode,
+            skip_files=skip_files
+        )
+
+    def read_all(self, root_path):
+        """ Reads all dat files and computes STFT of the PAMAP2 dataset"""
+        data = {}
+        filenames = [x for x in os.listdir(root_path) \
+                     if x not in self.skip_files]
+        uc = self.x_columns+[self.y_column]+[0]  # include timestamp here
+        for fn in tqdm(filenames):
+            data[fn] = []
+            df = pd.read_csv(
+                os.path.join(root_path, fn),
+                sep=' ',
+                usecols=uc,
+                header=None,
+            )
+            for drop_label in self.drop_labels:
+                df = df[df[self.y_column]!=drop_label]
+            df = df.dropna()  # Drop nan values
+            # Required for classification
+            if self.label_map is not None:
+                df[self.y_column] = df[self.y_column].apply(
+                    lambda _x: self.label_map[_x]
+                )
+            # Resampling if required
+            if self.source_freq != self.target_freq:
+                df = self.resample(df, discrete_columns=[0, self.y_column])
+            # activity split of csshar-tfa
+            _df = df[[0,self.y_column]]
+            min_df_label = _df.groupby((_df[self.y_column] != _df[self.y_column].shift()).cumsum()).min()
+            max_df_label = _df.groupby((_df[self.y_column] != _df[self.y_column].shift()).cumsum()).max()
+            labels_summary = pd.concat([min_df_label, max_df_label], axis=1)
+            labels_summary.columns = ['start_timestep', 'label_to_drop', 'end_timestep', 'label']
+            labels_summary = labels_summary.drop('label_to_drop', axis=1).reset_index(drop=True)
+            for _, row in labels_summary.iterrows():
+                dff = df.loc[df[df[0]==row.start_timestep].index[0]:df[df[0]==row.end_timestep].index[0]]
+                dff = dff.drop(0, axis=1)
+                x = torch.tensor(dff[self.x_columns].values,dtype=torch.float32)
+                # Dataset is in m/s^2, transform into g:
+                x = meter_per_sec_squared2g(x)
+                if self.apply_stft: x = self.stft(x)
+                lbl = int(row.label)
+                lbl = torch.tensor([lbl]*x.shape[0],
+                                   dtype=torch.int64)
+                for _x, _y in self.segment_xy(x=x, y=lbl):
+                    data[fn].append([_x, _y])
+                #data[fn].append([x, lbl])
+        return data
+
+
+class MobiActDataset(HARBaseDataset):
+    def __init__(
+        self, args, root_dir,
+        num_classes,
+        config_path='',
+        label_map=None,
+        valid_mode=False,
+        test_mode=False,
+        inference_mode=False,
+        skip_files=[],
+        **kwargs
+    ):
+        super().__init__(
+            args=args,
+            root_dir=root_dir,
+            num_classes=num_classes,
+            config_path=config_path,
+            label_map=label_map,
+            valid_mode=valid_mode,
+            test_mode=test_mode,
+            inference_mode=inference_mode,
+            skip_files=skip_files
+        )
+
+    def read_all(self, root_path):
+        '''Reads MobiAct data subject-wise'''
+        data = {}
+        to_load = [s for s in os.listdir(root_path) \
+                   if s not in self.skip_files and \
+                   os.path.isdir(os.path.join(root_path,s))]
+        uc = self.x_columns+[self.y_column, 'timestamp']
+        print('To load: ', to_load)
+        for sid in tqdm(to_load):
+            data[sid] = []
+            s_path = os.path.join(root_path, sid)
+            windows_added = 0
+            for csv_file in os.listdir(s_path):
+                df = pd.read_csv(
+                    os.path.join(s_path, csv_file),
+                    usecols=uc,
+                )
+                # Required for classification
+                if self.label_map is not None:
+                    df[self.y_column] = df[self.y_column].apply(
+                        lambda _x: self.label_map[_x]
+                    )
+                # Resampling if required
+                if self.source_freq != self.target_freq:
+                    df = self.resample(df, ['timestamp', self.y_column])
+                down_ax, down_ax_negative = self.get_down_axis(
+                    signals=torch.tensor(df[self.x_columns].values,
+                                         dtype=torch.float32)
+                )
+                # activity split of csshar-tfa
+                _df = df[['timestamp',self.y_column]]
+                min_df_label = _df.groupby((_df[self.y_column] != _df[self.y_column].shift()).cumsum()).min()
+                max_df_label = _df.groupby((_df[self.y_column] != _df[self.y_column].shift()).cumsum()).max()
+                labels_summary = pd.concat([min_df_label, max_df_label], axis=1)
+                labels_summary.columns = ['start_timestep', 'label_to_drop', 'end_timestep', 'label']
+                labels_summary = labels_summary.drop('label_to_drop', axis=1).reset_index(drop=True)
+                for _, row in labels_summary.iterrows():
+                    dff = df.loc[df[df['timestamp']==row.start_timestep].index[0]:df[df['timestamp']==row.end_timestep].index[0]]
+                    if len(dff) < self.n_fft:
+                        # signal too small for STFT computation!
+                        continue
+                    windows_added += 1
+                    dff = dff.drop('timestamp', axis=1)
+                    x = torch.tensor(dff[self.x_columns].values,dtype=torch.float32)
+                    if self.reorientation:
+                        x = self.swap_sensor_axes(x, down_ax, down_ax_negative)
+                    # Dataset is in m/s^2, transform into g:
+                    x = meter_per_sec_squared2g(x)
+                    if self.apply_stft: x = self.stft(x)
+                    lbl = int(row.label)
+                    lbl = torch.tensor([lbl]*x.shape[0],
+                                       dtype=torch.int64)
+                    for _x, _y in self.segment_xy(x=x, y=lbl):
+                        data[sid].append([_x, _y])
+                    #data[sid].append([x, lbl])
+        return data
+
+    def get_down_axis(self, signals):
+        mean_signals = signals.mean(axis=0)
+        down_ax = (mean_signals.abs()-9.80665).abs().argmin()
+        down_ax_negative = False
+        if mean_signals[down_ax] < 0:
+            down_ax_negative = True
+        return down_ax, down_ax_negative
+
+    def swap_sensor_axes(self, signals, down_ax, down_ax_negative):
+        '''Swaps sensor axes of MobiAct
+
+        In MobiAct subjects where free to choose sensor orientation.
+        Here gravity is determined by averaging m/s^2 signals. We assume
+        that the value that is closer to 9.80665 is the sensor pointing
+        downwards.
+        In HUNT4 back the position is:
+        'x-down, z-forward, y-left'
+        and thigh:
+        'x-down, z-backward, y-right'
+
+        MobiAct's down axis is changed accordingly
+
+        '''
+        if down_ax_negative:
+            signals[down_ax] = signals[down_ax]*-1  # Switch sign
+        if down_ax==0: return signals
+        signals[:,[0,down_ax]] = signals[:,[down_ax,0]]
+        return signals
+
+
+import scipy.io
+class USCHADDataset(HARBaseDataset):
+    def __init__(
+        self, args, root_dir,
+        num_classes,
+        config_path='',
+        label_map=None,
+        valid_mode=False,
+        test_mode=False,
+        inference_mode=False,
+        skip_files=[],
+        **kwargs
+    ):
+        '''Dataset class for loading the USC-HAD dataset properly.
+
+        Parameters
+        ----------
+        root_dir (string): Directory of training data
+
+        '''
+        self.use_hunt_sensor_pos = 'T'
+        super().__init__(
+            args=args,
+            root_dir=root_dir,
+            num_classes=num_classes,
+            config_path=config_path,
+            label_map=label_map,
+            valid_mode=valid_mode,
+            test_mode=test_mode,
+            inference_mode=inference_mode,
+            skip_files=skip_files
+        )
+
+    def read_all(self, root_path):
+        '''Reads USC-HAD data subject-wise'''
+        data = {}
+        to_load = [s for s in os.listdir(root_path) \
+                   if s not in self.skip_files and \
+                   os.path.isdir(os.path.join(root_path,s))]
+        print('To load: ', to_load)
+        for sid in tqdm(to_load):
+            data[sid] = []
+            s_path = os.path.join(root_path, sid)
+            for mat_file in os.listdir(s_path):
+                mat = scipy.io.loadmat(os.path.join(s_path, mat_file))
+                x = mat['sensor_readings'][:,self.x_columns]  # accel.
+                # Resampling if required
+                if self.source_freq != self.target_freq:
+                    x = self.resample(pd.DataFrame(x), []).values
+                x = torch.tensor(x, dtype=torch.float32)
+                if self.reorientation:
+                    x = self.swap_sensor_axes(x)
+                if self.apply_stft: x = self.stft(x)
+                try:
+                    lbl = self.label_map[int(mat['activity_number'][0])]
+                except KeyError:
+                    lbl = self.label_map[int(mat['activity_numbr'][0])]
+                lbl = torch.tensor([lbl]*x.shape[0],
+                                   dtype=torch.int64)
+                for _x, _y in self.segment_xy(x=x, y=lbl):
+                    data[sid].append([_x, _y])
+                #data[sid].append([x, lbl])
+        return data
+
+    def swap_sensor_axes(self, signals):
+        '''Swaps sensor axes of USCHAD
+
+        USCHAD sensor position is:
+        'x-down, y-forward, z-right'
+        In HUNT4 back the position is:
+        'x-down, z-forward, y-left'
+        and thigh:
+        'x-down, z-backward, y-right'
+
+        USCHAD is changed accordingly
+
+        '''
+        if self.use_hunt_sensor_pos == 'T':
+            signals[:,[1,2]] = signals[:,[2,1]]  # Swap y and z
+            signals[:, 2] = signals[:, 2]*-1  # Switch sign of new z
+        if self.use_hunt_sensor_pos == 'B':
+            signals[:,[1,2]] = signals[:,[2,1]]  # Swap y and z
+            signals[:, 1] = signals[:, 1]*-1  # Switch sign of new y
+        return signals
 
 
 ###########################################################################
@@ -1986,7 +2586,10 @@ def windowed_labels(
             output.append(one_hot)
         elif kind == 'argmax':
             output.append(np.argmax(counts))
-    return np.array(output)
+    if pad_end:
+        return output
+    else:
+        return np.array(output)
 
 
 def windowed_signals(
@@ -2006,7 +2609,10 @@ def windowed_signals(
         if len(chunk) < frame_length and not pad_end:
             continue
         output.append(chunk)
-    return np.array(output)
+    if pad_end:
+        return output
+    else:
+        return np.array(output)
 
 
 EPS=1e-10

@@ -349,9 +349,16 @@ class MLP(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
         opt = self.optimizers()
-        x, y = train_batch
+        if len(train_batch) == 2:
+            x, y = train_batch
+            mask = torch.ones(y.shape[:2]).to(y.device)
+        else:
+            x, y, mask = train_batch
         y_hat = self.mlp(x)
-        loss = self.criterion(y_hat, y)
+        # Ignore padded labels during loss computation:
+        loss = self.criterion(y_hat, y, reduction='none')*mask
+        # Compute own mean with mask
+        loss = loss.sum()/mask.sum()
         ##### Optimization #####
         opt.zero_grad()
         self.manual_backward(loss)
@@ -364,9 +371,16 @@ class MLP(pl.LightningModule):
         self._log_metrics(y, y_hat, self.metrics, step_call='train')
 
     def validation_step(self, val_batch, batch_idx):
-        x, y = val_batch
+        if len(val_batch) == 2:
+            x, y = val_batch
+            mask = torch.ones(y.shape[:2]).to(y.device)
+        else:
+            x, y, mask = val_batch
         y_hat = self.mlp(x)
-        loss = self.criterion(y_hat, y)
+        # Ignore padded labels during loss computation:
+        loss = self.criterion(y_hat, y, reduction='none')*mask
+        # Compute own mean with mask
+        loss = loss.sum()/mask.sum()
         self.log('val_loss', loss, prog_bar=True)
         self._log_metrics(y, y_hat, self.val_metrics, step_call='val')
 
@@ -637,22 +651,26 @@ class ReverseLayerF(torch.autograd.Function):
 
 
 class LinearRelu(pl.LightningModule):
-    def __init__(self, input_dim, output_dim):
-        '''Simple linear layer followed by a relu activation'''
+    def __init__(self, input_dim, output_dim, dropout=0.0):
+        '''Simple linear layer followed by a relu activation and dropout'''
         super().__init__()
         linear = torch.nn.Linear(
             in_features=input_dim,
             out_features=output_dim
         )
         relu = torch.nn.ReLU()
-        self.linear_relu = torch.nn.Sequential(linear, relu)
+        if dropout>0.0:
+            dropout_layer = torch.nn.Dropout(dropout)
+            self.linear_relu = torch.nn.Sequential(linear, relu, dropout_layer)
+        else:
+            self.linear_relu = torch.nn.Sequential(linear, relu)
 
     def forward(self, x):
         return self.linear_relu(x)
 
 
 class Conv1DRelu(pl.LightningModule):
-    def __init__(self, input_dim, num_filters, kernel_size, stride=1, padding=0):
+    def __init__(self, input_dim, num_filters, kernel_size, stride=1, padding=0, dropout=0.0):
         '''Simple Conv1D layer followed by a relu activation'''
         super().__init__()
         conv1d = torch.nn.Conv1d(
@@ -663,7 +681,11 @@ class Conv1DRelu(pl.LightningModule):
             padding=padding
         )
         relu = torch.nn.ReLU()
-        self.conv1d_relu = torch.nn.Sequential(conv1d, relu)
+        if dropout>0.0:
+            dropout_layer = torch.nn.Dropout(dropout)
+            self.conv1d_relu = torch.nn.Sequential(conv1d, relu, dropout_layer)
+        else:
+            self.conv1d_relu = torch.nn.Sequential(conv1d, relu)
 
     def forward(self, x):
         return self.conv1d_relu(x)
@@ -694,11 +716,12 @@ class _MLP(pl.LightningModule):
 
 
 class _CNN(pl.LightningModule):
-    def __init__(self, num_layers, input_dim, num_filters, kernel_size, padding=0):
+    def __init__(self, num_layers, input_dim, num_filters, kernel_size, padding=0, dropout=0.0):
         '''Convolutional Neural Network implementation
-        
+
         Sequence of Conv1D layers
         Each Conv1D layer is followed by a ReLU activation
+        and dropout if dropout prob > 0
 
         '''
         super().__init__()
@@ -708,7 +731,8 @@ class _CNN(pl.LightningModule):
             layers[f'Conv1D_{i}'] = Conv1DRelu(input_dim=_lastdim,
                                                num_filters=num_filters,
                                                kernel_size=kernel_size,
-                                               padding=padding)
+                                               padding=padding,
+                                               dropout=dropout)
             _lastdim = num_filters
         self.cnn = torch.nn.Sequential(layers)
 
@@ -1294,7 +1318,7 @@ def config_optimizers(args, params):
         scheduler = ExponentialSchedule(
             optimizer=optimizer,
             init_lr=float(args['lr']),
-            decay_steps=200,
+            decay_steps=args['lr_decay_steps'] if 'lr_decay_steps' in args else 200,
             #decay_steps=args['total_step_count']//args['epochs'],
             #decay_rate=0.9
             decay_rate=args['lr_decay_rate'] if 'lr_decay_rate' in args else 0.8

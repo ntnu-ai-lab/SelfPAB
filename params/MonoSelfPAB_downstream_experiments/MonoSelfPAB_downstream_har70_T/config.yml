@@ -1,0 +1,76 @@
+# Predict command
+## COMMAND: [ python, predict.py ]
+# Train command
+TRAIN_COMMAND: [ python, train.py ]
+LOO_CV_COMMAND: [python, loo_cross_validation.py]
+
+CLASSES:
+- { label: 6,  name: 'standing',}
+- { label: 3,  name: 'shuffling',}
+- { label: 1,  name: 'walking',}
+- { label: 7,  name: 'sitting',}
+- { label: 8,  name: 'lying',}
+- { label: 5,  name: 'stairs (descending)',}
+- { label: 4,  name: 'stairs (ascending)',}
+
+# --- Information about data
+# Path to training dataset 
+TRAIN_DATA: /path/to/har70plus/
+
+# Amount of training data used for validation (between 0 and 1)
+VALID_SPLIT: 0.2
+# Randomly selected test subjects (Not used during LOSO!)
+TEST_SUBJECTS: ['504.csv', '501.csv', '503.csv', '512.csv', '516.csv']
+SEED: 42
+
+NUM_WORKERS: 10  # Num of workers for data loading
+NUM_GPUS: [0]  # How many GPUs to use
+WANDB: False
+WANDB_KEY: '<Put wandb key here>'
+
+
+DATASET: STFT
+DATASET_ARGS:
+  x_columns: [[thigh_x, thigh_y, thigh_z]]
+  y_column: [label]
+  padding_val: [0.0]
+  # 50==1sec ==> 3000==60sec==1min
+  sequence_length: [15000]  # Window size (in samples) fed into the model
+  frame_shift: [300]  # How much to shift a window (in samples) null=same as sequence_length
+  normalize: [True]  # Whether to normalize the training data
+  norm_params_path: [params/norm_params/HUNT4_T/normalization_params_STFT_feats78_seqlen599/]
+  n_fft: [50]  # Size of Fourier transform (in samples)
+  phase: [False]
+  hop_length: [null]  # For STFT computation. If None, n_fft//2
+
+# -- Model 
+# Which classifier to use 
+ALGORITHM: DownstreamMLP
+# Arguments for classifier
+# (all given as lists in case to perform a GridSearch)
+ALGORITHM_ARGS:
+  epochs: [15]
+  batch_size: [100]
+  loss: [CrossEntropyLoss]
+  optimizer: [Adam]
+  weight_decay: [0.0]
+  output_activation: [softmax]
+  metrics: [[F1Score,Accuracy,Precision,Recall]]  # Which metrics to log
+  lr: [1e-4]
+  lr_scheduler: [ExponentialTFDecay]
+  # Architecture params
+  upstream_algorithm: [TransformerEncoderNetwork]
+  upstream_model_path: [params/MonoSelfPAB_upstream/upstream_model.ckpt]
+  rmv_upstream_layers: [4]  # remove the last 4 layers: 3metrics+1pred heads
+  weighted_sum_layer: [null]  # None=no weighted sum
+  fine_tune_step: [0.75]  # when start fine tune in %
+  dropout: [0.1]  # Dropout probability
+  n_prediction_head_layers: [2]  # Num layers of MLP at end of model
+  dim_prediction_head: [1028]  # Dim of hidden layers of MLP at end od model
+
+
+STORE_CMATS: True  # Store test cmats on disk
+SKIP_FINISHED_ARGS: False
+
+# Metric which defines the best model
+EVAL_METRIC: average_f1score

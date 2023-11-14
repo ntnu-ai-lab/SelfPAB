@@ -113,6 +113,13 @@ class Config(dict):
         """
         return {x['label']: x['name'] for x in self.classes}
 
+    @property
+    def class_name_label_map(self):
+        """
+        Get non-replaced class name to class label dict
+        """
+        return {x['name']: x['label'] for x in self.classes}
+
 
 class UpstreamConfig:
     def __init__(self, path):

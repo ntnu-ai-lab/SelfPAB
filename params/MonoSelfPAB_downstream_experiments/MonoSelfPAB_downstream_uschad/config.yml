@@ -1,0 +1,89 @@
+# Predict command
+## COMMAND: [ python, predict.py ]
+# Train command
+TRAIN_COMMAND: [ python, train.py ]
+LOO_CV_COMMAND: [python, loo_cross_validation.py]
+
+CLASSES:
+  - { label: 1,  name: 'Walking Forward',               }
+  - { label: 2,  name: 'Walking Left',      }
+  - { label: 3,  name: 'Walking Right',    }
+  - { label: 4,  name: 'Walking Upstairs',        }
+  - { label: 5,  name: 'Walking Downstairs',       }
+  - { label: 6,  name: 'Running Forward',         }
+  - { label: 7,  name: 'Jumping Up',         }
+  - { label: 8,  name: 'Sitting',         }
+  - { label: 9,  name: 'Standing',         }
+  - { label: 10,  name: 'Sleeping',         }
+  - { label: 11,  name: 'Elevator Up',         }
+  - { label: 12,  name: 'Elevator Down',         }
+ 
+
+# --- Information about data
+# Path to training dataset 
+TRAIN_DATA: data/uschad
+
+# Amount of training data used for validation (between 0 and 1)
+# Or subject IDs defining which subjects to use for valid
+# Or "test" to set VALID_SPLIT=TEST_SUBJECTS
+VALID_SPLIT: 0.2
+# Randomly selected test subjects (Not used during LOSO!)
+TEST_SUBJECTS: [Subject13, Subject14]
+SEED: 28
+FOLDS: 5  # If LOSO set FOLDS: 0
+
+NUM_WORKERS: 30  # Num of workers for data loading
+NUM_GPUS: []  # How many GPUs to use
+WANDB: False
+WANDB_KEY: '<Put wandb key here>'
+EARLY_STOPPING: False
+
+
+DATASET: USCHAD
+DATASET_ARGS:
+  sequence_length: [15000]  # Window size (in samples) fed into the model
+  x_columns: [[0,1,2]]
+  y_column: [null]  # Automatically extracted
+  normalize: [True]  # Whether to normalize the training data
+  norm_params_path: [params/norm_params/HUNT4_T/normalization_params_STFT_feats78_seqlen599/]
+  n_fft: [50]  # Size of Fourier transform (in samples)
+  phase: [False]
+  hop_length: [null]  # For STFT computation. If None, n_fft//2
+  source_freq: [100]  # Sampling frequency of dataset
+  target_freq: [50]  # Sampling frequency to use for training
+  reorientation: [True]  # Reorient axes to be closer to HUNT4 orientation
+
+# -- Model 
+# Which classifier to use 
+ALGORITHM: DownstreamMLP
+# Arguments for classifier
+# (all given as lists in case to perform a GridSearch)
+ALGORITHM_ARGS:
+  epochs: [10]
+  batch_size: [1]
+  loss: [CrossEntropyLoss]
+  optimizer: [Adam]
+  weight_decay: [0.0]
+  output_activation: [softmax]
+  metrics: [[]]  # Which metrics to log
+  lr: [2e-4]
+  lr_scheduler: [ExponentialTFDecay]
+  lr_decay_rate: [0.8]
+  val_after_nth_step: [100]
+  # Architecture params
+  upstream_algorithm: [TransformerEncoderNetwork]
+  upstream_model_path: [params/MonoSelfPAB_upstream/upstream_model.ckpt]
+  rmv_upstream_layers: [4]  # remove the last 4 layers: 3metrics+1pred heads
+  weighted_sum_layer: [null]  # None=no weighted sum
+  fine_tune_step: [0.2]  # when start fine tune in %
+  dropout: [0.1]  # Dropout probability
+  n_prediction_head_layers: [2]  # Num layers of MLP at end of model
+  dim_prediction_head: [1028]  # Dim of hidden layers of MLP at end od model
+  d_model: [1500]  # only important for lr decay
+
+
+STORE_CMATS: True  # Store test cmats on disk
+SKIP_FINISHED_ARGS: False
+
+# Metric which defines the best model
+EVAL_METRIC: average_f1score

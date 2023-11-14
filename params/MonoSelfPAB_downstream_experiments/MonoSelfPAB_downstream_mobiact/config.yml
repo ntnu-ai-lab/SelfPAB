@@ -1,0 +1,83 @@
+# Predict command
+## COMMAND: [ python, predict.py ]
+# Train command
+TRAIN_COMMAND: [ python, train.py ]
+LOO_CV_COMMAND: [python, loo_cross_validation.py]
+CLASSES:
+  - { label: 0,  name: 'STD',}
+  - { label: 1,  name: 'WAL',}
+  - { label: 2,  name: 'JOG',}
+  - { label: 3,  name: 'JUM',}
+  - { label: 4,  name: 'STU',}
+  - { label: 5,  name: 'STN',}
+  - { label: 6,  name: 'SCH',}
+  - { label: 7,  name: 'SIT',}
+  - { label: 8,  name: 'CHU',}
+  - { label: 9,  name: 'CSI',}
+  - { label: 10, name: 'CSO',}
+
+# --- Information about data
+# Path to training dataset 
+TRAIN_DATA: data/mobiact/
+
+# Amount of training data used for validation (between 0 and 1)
+VALID_SPLIT: 0.2
+# Randomly selected test subjects (Not used during LOSO!)
+TEST_SUBJECTS: null
+SEED: 28
+FOLDS: 5
+TEST_SPLIT: 0.2  # In case FOLDS:1, 20% used as test data for single fold
+
+NUM_WORKERS: 10  # Num of workers for data loading
+NUM_GPUS: [0]  # How many GPUs to use
+WANDB: False
+WANDB_KEY: '<Put wandb key here>'
+
+
+DATASET: MobiAct
+DATASET_ARGS:
+  x_columns: [[acc_x, acc_y, acc_z]]  # ankle x,y,z accelerometer
+  y_column: [label]
+  # 50==1sec ==> 3000==60sec==1min
+  sequence_length: [15000]  # Window size (in samples) fed into the model
+  normalize: [True]  # Whether to normalize the training data
+  n_fft: [50]  # Size of Fourier transform (in samples)
+  phase: [False]
+  hop_length: [null]  # For STFT computation. If None, n_fft//2
+  norm_params_path: [params/norm_params/HUNT4_T/normalization_params_STFT_feats78_seqlen599/]
+  source_freq: [200]  # Sampling frequency of dataset
+  target_freq: [50]  # Sampling frequency to use for training
+  reorientation: [True]  # Reorient axes to be closer to HUNT4 orientation
+
+# -- Model 
+# Which classifier to use 
+ALGORITHM: DownstreamMLP
+# Arguments for classifier
+ALGORITHM_ARGS:
+  epochs: [50]
+  batch_size: [35]
+  loss: [CrossEntropyLoss]
+  optimizer: [Adam]
+  weight_decay: [0.0]
+  output_activation: [softmax]
+  metrics: [[F1Score]]  # Which metrics to log
+  lr: [1e-3]
+  lr_scheduler: [ExponentialTFDecay]
+  lr_decay_rate: [0.8]
+  # Architecture params
+  upstream_algorithm: [TransformerEncoderNetwork]
+  upstream_model_path: [params/MonoSelfPAB_upstream/upstream_model.ckpt]
+  rmv_upstream_layers: [4]  # remove the last 4 layers: 3metrics+1pred heads
+  weighted_sum_layer: [null]  # None=no weighted sum
+  fine_tune_step: [0.75]
+  dropout: [0.1]  # Dropout probability
+  n_prediction_head_layers: [2]  # Num layers of MLP at end of model
+  dim_prediction_head: [1028]  # Dim of hidden layers of MLP at end od model
+  val_after_nth_step: [100]  # No validation during Hyperopt
+
+
+STORE_CMATS: True  # Store test cmats on disk
+SKIP_FINISHED_ARGS: False
+
+# Metric which defines the best model
+EVAL_METRIC: average_f1score

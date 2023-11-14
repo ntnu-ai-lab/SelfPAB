@@ -160,6 +160,7 @@ def upstream(config, ds_path=None):
                 best_model.eval()  # eval mode
                 trainer.test(best_model, dataloaders=test_dl)
             if config.WANDB: wandb.finish()
+            torch.cuda.empty_cache()
 
 
 

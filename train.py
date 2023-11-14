@@ -84,7 +84,8 @@ def train(config, ds_path=None, loso=False):
                 label_map=config.label_index,
                 replace_classes=config.replace_classes,
                 config_path=config.CONFIG_PATH,
-                skip_files=skip_files
+                skip_files=skip_files,
+                name_label_map=config.class_name_label_map
             )
             # Split into train and validation
             valid_amount = int(np.floor(len(dataset)*valid_split))
@@ -106,7 +107,8 @@ def train(config, ds_path=None, loso=False):
                     label_map=config.label_index,
                     replace_classes=config.replace_classes,
                     skip_files=skip_files,
-                    valid_mode=True
+                    valid_mode=True,
+                    name_label_map=config.class_name_label_map
                 )
                 if valid_subjects is not None: print(f'Valid subjects: {valid_subjects}')
             # Create the dataloaders
@@ -198,7 +200,7 @@ def train(config, ds_path=None, loso=False):
                 # Skip the train subjects
                 skip_files = [x for x in os.listdir(ds_path) \
                               if x not in config.TEST_SUBJECTS]
-                if valid_subjects: 
+                if valid_subjects:
                     for vs in valid_subjects:
                         if vs not in config.TEST_SUBJECTS:
                             skip_files.append(vs)
@@ -211,11 +213,13 @@ def train(config, ds_path=None, loso=False):
                     label_map=config.label_index,
                     replace_classes=config.replace_classes,
                     skip_files=skip_files,
-                    test_mode=True, inference_mode=True
+                    test_mode=True, inference_mode=True,
+                    name_label_map=config.class_name_label_map
                 )
                 test_dl = torch.utils.data.DataLoader(
                     dataset=test_dataset,
-                    batch_size=args['batch_size'],
+                    #batch_size=args['batch_size'],
+                    batch_size=1,
                     shuffle=False,
                     num_workers=config.NUM_WORKERS
                 )
