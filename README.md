@@ -66,5 +66,17 @@ If you use the [pre-trained SelfPAB upstream model](https://github.com/ntnu-ai-l
 
 If you use the [pre-trained MonoSelfPAB upstream model](https://github.com/ntnu-ai-lab/SelfPAB/blob/main/params/MonoSelfPAB_upstream/upstream_model.ckpt) for your research, please cite the following paper:
 ```bibtex
-TODO
+@article{logacjovSelfsupervisedLearningRandomized2024,
+  title = {Self-Supervised Learning with Randomized Cross-Sensor Masked Reconstruction for Human Activity Recognition},
+  author = {Logacjov, Aleksej and Bach, Kerstin},
+  year = {2024},
+  month = feb,
+  journal = {Engineering Applications of Artificial Intelligence},
+  volume = {128},
+  pages = {107478},
+  issn = {0952-1976},
+  doi = {10.1016/j.engappai.2023.107478},
+  urldate = {2023-11-15},
+  keywords = {Accelerometer,Human activity recognition,Machine learning,Representation learning,Self-supervised learning,Transformer}
+}
 ```
