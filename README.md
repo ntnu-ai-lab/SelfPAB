@@ -12,7 +12,7 @@ __Note__: Per default the script tries to use a GPU to run the trainings. If no 
 NUM_GPUS: []
 ```
 ## Download Datasets
-Download the required datasets. Currently the downstream datasets [HARTH](https://archive.ics.uci.edu/dataset/779/harth), [HAR70+](https://archive.ics.uci.edu/dataset/780/har70), [PAMAP2](https://archive.ics.uci.edu/dataset/231/pamap2+physical+activity+monitoring), and [USC-HAD](https://sipi.usc.edu/had/) are supported. The HUNT4 subset used for pre-training is planned to be published in future releases.
+Download the required datasets. Currently, the downstream datasets [HARTH](https://archive.ics.uci.edu/dataset/779/harth), [HAR70+](https://archive.ics.uci.edu/dataset/780/har70), [PAMAP2](https://archive.ics.uci.edu/dataset/231/pamap2+physical+activity+monitoring), and [USC-HAD](https://sipi.usc.edu/had/) are supported.
 ```bash
 python download_dataset.py <dataset_name>
 # Example (HARTH): python download_dataset.py harth
@@ -22,8 +22,10 @@ python download_dataset.py <dataset_name>
 ```
 This command will download the given dataset into the [data/](https://github.com/ntnu-ai-lab/SelfPAB/tree/main/data) folder.
 
+The HUNT4 subset used for pre-training can be requested by contacting [kontakt\@hunt.ntnu.no](mailto:kontakt@hunt.ntnu.no?subject=HUNT4 accelerometer snippets). Ask for the data used in the paper "Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition".
+
 ## Upstream Pre-training
-The upstream training can be started with:
+After unzipping the pre-training HUNT4 data and storing it in `data/hunt4`, the upstream training can be started with:
 ```bash
 python upstream.py -p <path/to/config.yml> -d <path/to/dataset>
 # Example (SelfPAB): python upstream.py -p params/selfPAB_upstream/config.yml -d data/hunt4/
