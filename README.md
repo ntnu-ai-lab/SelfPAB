@@ -1,6 +1,9 @@
 # SelfPAB
 Implementations of the SelfPAB and MonoSelfPAB methods presented in our papers: "Large-Scale Pre-Training for Dual-Accelerometer Human Activity Recognition", and "[Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition](https://www.sciencedirect.com/science/article/pii/S0952197623016627)", respectively.
 
+## Preface: Access to HUNT4 pre-training data
+The HUNT4 subset used for pre-training can be requested by contacting [kontakt\@hunt.ntnu.no](mailto:kontakt@hunt.ntnu.no?subject=HUNT4 accelerometer snippets). Ask for the data used in the paper "Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition".
+
 ## Requirements
 [![git-lfs 3.4.1](https://img.shields.io/badge/Git_LFS-3.4.1-green)](https://git-lfs.com)
 [![Python 3.8.10](https://img.shields.io/badge/Python_Versions-3.8_%7C_3.9_%7C_3.10-blue)](https://www.python.org/downloads/release/python-3810/)
@@ -12,7 +15,7 @@ __Note__: Per default the script tries to use a GPU to run the trainings. If no 
 NUM_GPUS: []
 ```
 ## Download Datasets
-Download the required datasets. Currently, the downstream datasets [HARTH](https://archive.ics.uci.edu/dataset/779/harth), [HAR70+](https://archive.ics.uci.edu/dataset/780/har70), [PAMAP2](https://archive.ics.uci.edu/dataset/231/pamap2+physical+activity+monitoring), and [USC-HAD](https://sipi.usc.edu/had/) are supported.
+Download the required datasets. Currently, the downstream datasets [HARTH](https://archive.ics.uci.edu/dataset/779/harth), [HAR70+](https://archive.ics.uci.edu/dataset/780/har70), [PAMAP2](https://archive.ics.uci.edu/dataset/231/pamap2+physical+activity+monitoring), and [USC-HAD](https://sipi.usc.edu/had/) are supported. The HUNT4 pre-training data can be requested by contacting [kontakt\@hunt.ntnu.no](mailto:kontakt@hunt.ntnu.no?subject=HUNT4 accelerometer snippets), see Preface.
 ```bash
 python download_dataset.py <dataset_name>
 # Example (HARTH): python download_dataset.py harth
@@ -21,8 +24,6 @@ python download_dataset.py <dataset_name>
 # Example (USC-HAD): python download_dataset.py uschad
 ```
 This command will download the given dataset into the [data/](https://github.com/ntnu-ai-lab/SelfPAB/tree/main/data) folder.
-
-The HUNT4 subset used for pre-training can be requested by contacting [kontakt\@hunt.ntnu.no](mailto:kontakt@hunt.ntnu.no?subject=HUNT4 accelerometer snippets). Ask for the data used in the paper "Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition".
 
 ## Upstream Pre-training
 After unzipping the pre-training HUNT4 data and storing it in `data/hunt4`, the upstream training can be started with:
