@@ -1,5 +1,5 @@
 # SelfPAB
-Implementations of the SelfPAB and MonoSelfPAB methods presented in our papers: "Large-Scale Pre-Training for Dual-Accelerometer Human Activity Recognition", and "[Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition](https://www.sciencedirect.com/science/article/pii/S0952197623016627)", respectively.
+Implementations of the SelfPAB and MonoSelfPAB methods presented in our papers: "[SelfPAB: large-scale pre-training on accelerometer data for human activity recognition](https://doi.org/10.1007/s10489-024-05322-3)", and "[Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition](https://www.sciencedirect.com/science/article/pii/S0952197623016627)", respectively.
 
 ## Preface: Access to HUNT4 pre-training data
 The HUNT4 subset used for pre-training can be requested by contacting [kontakt\@hunt.ntnu.no](mailto:kontakt@hunt.ntnu.no?subject=HUNT4%20accelerometer%20snippets). Ask for the data used in the paper "Self-supervised Learning with Randomized Cross-sensor Masked Reconstruction for Human Activity Recognition".
@@ -66,13 +66,17 @@ It will create the feature vectors of the given dataset batch-wise in a features
 ## Citation
 If you use the [pre-trained SelfPAB upstream model](https://github.com/ntnu-ai-lab/SelfPAB/blob/main/params/selfPAB_upstream/upstream_model.ckpt) for your research, please cite the following paper:
 ```bibtex
-@inproceedings{logacjovLargeScalePreTrainingDualAccelerometer2023,
-  title = {Large-{{Scale Pre-Training}} for {{Dual-Accelerometer Human Activity Recognition}}},
-  booktitle = {35th {{Norwegian ICT Conference}} for {{Research}} and {{Education}}, {{Accepted}} for Publication},
+@article{logacjovSelfPABLargescalePretraining2024,
+  title = {{{SelfPAB}}: Large-Scale Pre-Training on Accelerometer Data for Human Activity Recognition},
+  shorttitle = {{{SelfPAB}}},
   author = {Logacjov, Aleksej and Herland, Sverre and Ustad, Astrid and Bach, Kerstin},
-  year = {2023},
-  month = nov,
-  address = {{Stavanger, Norway}},
+  year = {2024},
+  month = mar,
+  journal = {Applied Intelligence},
+  issn = {1573-7497},
+  doi = {10.1007/s10489-024-05322-3},
+  urldate = {2024-03-29},
+  keywords = {Accelerometer,Human activity recognition,Machine learning,Physical activity behavior,Self-supervised learning,Transformer},
 }
 ```
 
